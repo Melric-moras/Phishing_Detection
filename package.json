@@ -1,25 +1,17 @@
 {
-  "name": "phishing_detection",
+  "name": "phishguard",
   "version": "1.0.0",
-  "description": "This project is a simple and user-friendly phishing detection tool designed for elderly and non-technical users. It analyzes URLs and text messages to identify potential phishing threats using pattern-based detection.",
-  "main": "index.js",
+  "description": "AI-Powered Phishing Protection Tool",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Melric-moras/Phishing_Detection.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/Melric-moras/Phishing_Detection/issues"
-  },
-  "homepage": "https://github.com/Melric-moras/Phishing_Detection#readme",
   "dependencies": {
     "cors": "^2.8.6",
-    "express": "^5.2.1"
+    "express": "^4.22.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   }
 }
