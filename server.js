@@ -56,9 +56,10 @@ function analyzeURL(url) {
   const domain = extractDomain(url);
   const urlLower = url.toLowerCase();
 
+  // FIXED: Check if the domain is a trusted domain or a subdomain of a trusted domain
   const isTrusted = TRUSTED_DOMAINS.some(d =>
     domain === d || domain.endsWith('.' + d)
-  ) && !domain.includes(d + '.');
+  );
   if (isTrusted) {
     return { status: 'SAFE', score: 0, reasons: ['This is a known trusted website.'] };
   }

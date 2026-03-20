@@ -159,17 +159,21 @@ function changeLang(lang) {
 }
 
 /* ══════════════════════════════════════
-   VOICE — now removes emojis for natural speech
+   VOICE — now removes emojis and ensures text is not empty
 ══════════════════════════════════════ */
 function speak(text) {
   const voiceToggle = document.getElementById('voiceToggle');
   if (!voiceToggle.checked) return;
   if (!('speechSynthesis' in window)) return;
+  if (!text || text.trim() === '') return;
+
   window.speechSynthesis.cancel();
 
   // Remove emojis and special symbols that may cause weird pronunciation
   let cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
   cleanText = cleanText.replace(/[^\w\s.,!?]/g, '');
+
+  if (cleanText.trim() === '') return;
 
   const utt = new SpeechSynthesisUtterance(cleanText);
   utt.lang = { en:'en-US', hi:'hi-IN', ta:'ta-IN', es:'es-ES', fr:'fr-FR', ar:'ar-SA' }[currentLang] || 'en-US';
