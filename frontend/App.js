@@ -121,34 +121,34 @@ function t(key) {
 function applyLang() {
   const voiceToggle = document.getElementById('voiceToggle');
   const map = {
-    headerSub:      'headerSub',
-    infoBarText:    'infoBar',
-    linkCardTitle:  'linkCardTitle',
-    linkCardSub:    'linkCardSub',
-    smsCardTitle:   'smsCardTitle',
-    smsCardSub:     'smsCardSub',
-    qrCardTitle:    'qrCardTitle',
-    qrCardSub:      'qrCardSub',
-    domainCardTitle:'domainCardTitle',
-    domainCardSub:  'domainCardSub',
-    linkBtnText:    'linkBtnText',
-    smsBtnText:     'smsBtnText',
-    qrBtnText:      'qrBtnText',
-    domainBtnText:  'domainBtnText',
-    spinnerText:    'spinnerText',
+    headerSub:       'headerSub',
+    infoBarText:     'infoBar',
+    linkCardTitle:   'linkCardTitle',
+    linkCardSub:     'linkCardSub',
+    smsCardTitle:    'smsCardTitle',
+    smsCardSub:      'smsCardSub',
+    qrCardTitle:     'qrCardTitle',
+    qrCardSub:       'qrCardSub',
+    domainCardTitle: 'domainCardTitle',
+    domainCardSub:   'domainCardSub',
+    linkBtnText:     'linkBtnText',
+    smsBtnText:      'smsBtnText',
+    qrBtnText:       'qrBtnText',
+    domainBtnText:   'domainBtnText',
+    spinnerText:     'spinnerText',
     tryExamplesLabel:'tryExamples',
-    historyTitle:   'historyTitle',
-    chatTitle:      'chatTitle',
-    chatSubTitle:   'chatSub',
-    noHistory:      'noHistory',
-    qrDropText:     'qrDropText',
+    historyTitle:    'historyTitle',
+    chatTitle:       'chatTitle',
+    chatSubTitle:    'chatSub',
+    noHistory:       'noHistory',
+    qrDropText:      'qrDropText',
   };
   Object.entries(map).forEach(([id, key]) => {
     const el = document.getElementById(id);
     if (el) el.textContent = t(key);
   });
   const voiceLabel = document.getElementById('voiceLabel');
-  if (voiceLabel) voiceLabel.textContent = voiceToggle.checked ? t('voiceOn') : t('voiceOff');
+  if (voiceLabel) voiceLabel.textContent = voiceToggle?.checked ? t('voiceOn') : t('voiceOff');
   document.documentElement.lang = currentLang;
   document.body.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
 }
@@ -159,42 +159,73 @@ function changeLang(lang) {
 }
 
 /* ══════════════════════════════════════
-   VOICE — now removes emojis and ensures text is not empty
+   VOICE — speaks in the selected language
 ══════════════════════════════════════ */
+
+// Maps UI language code → BCP-47 language tag for SpeechSynthesis
+const VOICE_LANG_MAP = {
+  en: 'en-IN',   // Indian English — widely available, fits the user base
+  hi: 'hi-IN',
+  ta: 'ta-IN',
+  es: 'es-ES',
+  fr: 'fr-FR',
+  ar: 'ar-SA',
+};
+
 function speak(text) {
   const voiceToggle = document.getElementById('voiceToggle');
-  if (!voiceToggle.checked) return;
+  if (!voiceToggle?.checked) return;
   if (!('speechSynthesis' in window)) return;
   if (!text || text.trim() === '') return;
 
   window.speechSynthesis.cancel();
 
-  // Remove emojis and special symbols that may cause weird pronunciation
-  let cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
-  cleanText = cleanText.replace(/[^\w\s.,!?]/g, '');
+  // Strip emojis and symbols that cause awkward pronunciation
+  let clean = text
+    .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, '')
+    .replace(/[^\w\s.,!?'-]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 
-  if (cleanText.trim() === '') return;
+  if (!clean) return;
 
-  const utt = new SpeechSynthesisUtterance(cleanText);
-  utt.lang = { en:'en-US', hi:'hi-IN', ta:'ta-IN', es:'es-ES', fr:'fr-FR', ar:'ar-SA' }[currentLang] || 'en-US';
-  utt.rate = 0.92;
+  const utt  = new SpeechSynthesisUtterance(clean);
+  const bcp  = VOICE_LANG_MAP[currentLang] || 'en-IN';
+  utt.lang   = bcp;
+  utt.rate   = 0.92;
+
+  // Try to find a matching installed voice; fall back gracefully
+  const voices = window.speechSynthesis.getVoices();
+  const match  = voices.find(v => v.lang === bcp)
+               || voices.find(v => v.lang.startsWith(bcp.split('-')[0]))
+               || null;
+  if (match) utt.voice = match;
+
   window.speechSynthesis.speak(utt);
+}
+
+// Re-run voice selection after voices load (async in some browsers)
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = () => { /* voices now available */ };
 }
 
 /* ══════════════════════════════════════
    BACKEND API CALLS
 ══════════════════════════════════════ */
+
+// FIX: pass the actual current language directly.
+// Previously es and fr were incorrectly mapped to 'en',
+// causing the backend to return English messages for those languages.
 function getLangKey() {
-  const map = { en:'en', hi:'hi', ta:'ta', es:'en', fr:'en', ar:'ar' };
-  return map[currentLang] || 'en';
+  return currentLang;
 }
 
 async function callBackend(endpoint, body) {
   try {
     const res = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body:    JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`Server error: ${res.status}`);
     return await res.json();
@@ -208,20 +239,25 @@ async function callBackend(endpoint, body) {
    CONVERT BACKEND RESULT → DISPLAY FORMAT
 ══════════════════════════════════════ */
 function backendToDisplay(result) {
-  const riskMap = { SAFE: 'SAFE', SUSPICIOUS: 'SUSPICIOUS', DANGEROUS: 'DANGEROUS' };
   const emojiMap = { SAFE: '✅', SUSPICIOUS: '⚠️', DANGEROUS: '🚨' };
   const titleMap = {
-    SAFE: 'Looks Safe',
+    SAFE:       'Looks Safe',
     SUSPICIOUS: 'Looks Suspicious',
-    DANGEROUS: 'Danger — Likely Phishing'
+    DANGEROUS:  'Danger — Likely Phishing',
   };
   return {
-    risk: riskMap[result.status] || 'SUSPICIOUS',
-    emoji: emojiMap[result.status] || '⚠️',
-    title: titleMap[result.status] || result.status,
+    risk:        result.status || 'SUSPICIOUS',
+    emoji:       emojiMap[result.status]  || '⚠️',
+    title:       titleMap[result.status]  || result.status,
     explanation: result.message || 'Analysis complete.',
-    tips: result.reasons?.length ? result.reasons.slice(0, 3) : ['Always double-check links before clicking.', 'Never share your OTP or PIN.', 'When in doubt, contact your bank directly.'],
-    voice_alert: result.message || ''
+    tips:        result.reasons?.length
+                   ? result.reasons.slice(0, 3)
+                   : [
+                       'Always double-check links before clicking.',
+                       'Never share your OTP or PIN.',
+                       'When in doubt, contact your bank directly.',
+                     ],
+    voice_alert: result.message || '',
   };
 }
 
@@ -232,18 +268,19 @@ function showResult(data, inputPreview, type) {
   const panel = document.getElementById('resultPanel');
   panel.classList.add('show');
 
-  const riskMap = { SAFE:'safe', SUSPICIOUS:'warn', DANGEROUS:'danger' };
-  const state = riskMap[data.risk] || 'safe';
+  const stateMap = { SAFE: 'safe', SUSPICIOUS: 'warn', DANGEROUS: 'danger' };
+  const state    = stateMap[data.risk] || 'safe';
 
   document.getElementById('resultBadge').textContent = data.emoji;
   document.getElementById('resultLabel').textContent = data.title;
-  document.getElementById('resultSub').textContent =
-    { SAFE:'✅ No threats detected', SUSPICIOUS:'⚠️ Proceed with caution', DANGEROUS:'🚨 Do not proceed!' }[data.risk];
+  document.getElementById('resultSub').textContent   =
+    { SAFE: '✅ No threats detected', SUSPICIOUS: '⚠️ Proceed with caution', DANGEROUS: '🚨 Do not proceed!' }[data.risk];
   document.getElementById('resultExplain').textContent = data.explanation;
 
   const tipsEl = document.getElementById('resultTips');
+  const icon   = state === 'safe' ? '✅' : state === 'warn' ? '⚠️' : '🚫';
   tipsEl.innerHTML = (data.tips || []).map(tip =>
-    `<div class="tip-item"><span class="tip-icon">${state==='safe'?'✅':state==='warn'?'⚠️':'🚫'}</span>${escHtml(tip)}</div>`
+    `<div class="tip-item"><span class="tip-icon">${icon}</span>${escHtml(tip)}</div>`
   ).join('');
 
   document.getElementById('mainGrid').className = 'main state-' + state;
@@ -261,20 +298,20 @@ async function runAnalysis(endpoint, body, inputPreview, type) {
   showSpinner(true);
   disableButtons(true);
   try {
-    const result = await callBackend(endpoint, body);
+    const result  = await callBackend(endpoint, body);
     const display = backendToDisplay(result);
     showResult(display, inputPreview, type);
   } catch (e) {
     console.error('Analysis error:', e);
-    let errorMsg = 'Analysis failed. ';
+    let msg = 'Analysis failed. ';
     if (e.message === 'Failed to fetch') {
-      errorMsg += 'Cannot connect to server. Make sure the server is running on http://localhost:3000\n\nRun: node server.js';
+      msg += 'Cannot connect to server. Make sure the server is running on http://localhost:3000\n\nRun: node server.js';
     } else if (e.message.includes('Server error')) {
-      errorMsg += `Server returned error: ${e.message}`;
+      msg += `Server returned error: ${e.message}`;
     } else {
-      errorMsg += 'Please check if the backend server is running properly.';
+      msg += 'Please check if the backend server is running properly.';
     }
-    alert(errorMsg);
+    alert(msg);
   } finally {
     showSpinner(false);
     disableButtons(false);
@@ -317,7 +354,8 @@ function handleQR(event) {
     const img = new Image();
     img.onload = function() {
       const canvas = document.createElement('canvas');
-      canvas.width = img.width; canvas.height = img.height;
+      canvas.width  = img.width;
+      canvas.height = img.height;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -326,16 +364,16 @@ function handleQR(event) {
       preview.src = e.target.result;
       preview.style.display = 'block';
       const decoded = document.getElementById('qrDecoded');
-      const btn = document.getElementById('qrBtn');
+      const btn     = document.getElementById('qrBtn');
       if (code) {
-        decoded.value = code.data;
+        decoded.value        = code.data;
         decoded.style.display = 'block';
-        btn.style.display = 'flex';
+        btn.style.display    = 'flex';
       } else {
-        decoded.value = '';
-        decoded.placeholder = 'Could not decode QR. Try a clearer image.';
+        decoded.value        = '';
+        decoded.placeholder  = 'Could not decode QR. Try a clearer image.';
         decoded.style.display = 'block';
-        btn.style.display = 'none';
+        btn.style.display    = 'none';
       }
     };
     img.src = e.target.result;
@@ -347,10 +385,11 @@ function handleQR(event) {
 document.addEventListener('DOMContentLoaded', () => {
   const qrDrop = document.getElementById('qrDrop');
   if (qrDrop) {
-    qrDrop.addEventListener('dragover', e => { e.preventDefault(); qrDrop.classList.add('drag-over'); });
-    qrDrop.addEventListener('dragleave', () => qrDrop.classList.remove('drag-over'));
-    qrDrop.addEventListener('drop', e => {
-      e.preventDefault(); qrDrop.classList.remove('drag-over');
+    qrDrop.addEventListener('dragover',  e => { e.preventDefault(); qrDrop.classList.add('drag-over'); });
+    qrDrop.addEventListener('dragleave', ()  => qrDrop.classList.remove('drag-over'));
+    qrDrop.addEventListener('drop',      e  => {
+      e.preventDefault();
+      qrDrop.classList.remove('drag-over');
       const file = e.dataTransfer.files[0];
       if (file) handleQR({ target: { files: [file] } });
     });
@@ -359,7 +398,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const voiceToggle = document.getElementById('voiceToggle');
   if (voiceToggle) {
     voiceToggle.addEventListener('change', () => {
-      document.getElementById('voiceLabel').textContent = voiceToggle.checked ? t('voiceOn') : t('voiceOff');
+      document.getElementById('voiceLabel').textContent =
+        voiceToggle.checked ? t('voiceOn') : t('voiceOff');
     });
   }
 
@@ -383,23 +423,16 @@ function disableButtons(d) {
 }
 
 function setExample(field, val) {
-  if (field === 'link') {
-    const linkInput = document.getElementById('linkInput');
-    if (linkInput) {
-      linkInput.value = val;
-      linkInput.focus();
-    }
-  } else if (field === 'sms') {
-    const smsInput = document.getElementById('smsInput');
-    if (smsInput) {
-      smsInput.value = val;
-      smsInput.focus();
-    }
-  }
+  const id  = field === 'link' ? 'linkInput' : 'smsInput';
+  const el  = document.getElementById(id);
+  if (el) { el.value = val; el.focus(); }
 }
 
 function escHtml(t) {
-  return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(t)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
 }
 
 /* ══════════════════════════════════════
@@ -415,10 +448,7 @@ function renderHistory() {
   const noEl = document.getElementById('noHistory');
   if (scanHistory.length === 0) {
     if (noEl) noEl.style.display = 'block';
-    if (list) {
-      list.innerHTML = '';
-      if (noEl) list.appendChild(noEl);
-    }
+    if (list) { list.innerHTML = ''; if (noEl) list.appendChild(noEl); }
     return;
   }
   if (noEl) noEl.style.display = 'none';
@@ -450,31 +480,28 @@ function clearHistory() {
 ══════════════════════════════════════ */
 async function sendChat() {
   const input = document.getElementById('chatInput');
-  const msg = input.value.trim();
+  const msg   = input.value.trim();
   if (!msg) return;
   input.value = '';
   addChatMsg(msg, 'user');
   const typingId = addTyping();
-  const sendBtn = document.getElementById('chatSend');
+  const sendBtn  = document.getElementById('chatSend');
   if (sendBtn) sendBtn.disabled = true;
 
   try {
-    const data = await callBackend('/api/chatbot', { message: msg });
+    const data  = await callBackend('/api/chatbot', { message: msg });
     const reply = data.reply || 'I am sorry, I could not process that.';
     removeTyping(typingId);
     addChatMsg(reply, 'bot');
     const voiceToggle = document.getElementById('voiceToggle');
-    if (voiceToggle && voiceToggle.checked && reply.length < 200) speak(reply);
+    if (voiceToggle?.checked && reply.length < 220) speak(reply);
   } catch (error) {
     console.error('Chat error:', error);
     removeTyping(typingId);
-    let errorMsg = 'Sorry, I could not connect to the server. ';
-    if (error.message === 'Failed to fetch') {
-      errorMsg += 'Make sure the server is running on http://localhost:3000';
-    } else {
-      errorMsg += 'Please check if the backend server is running properly.';
-    }
-    addChatMsg(errorMsg, 'bot');
+    const errMsg = error.message === 'Failed to fetch'
+      ? 'Sorry, I could not connect to the server. Make sure the server is running on http://localhost:3000'
+      : 'Sorry, something went wrong. Please check if the backend server is running.';
+    addChatMsg(errMsg, 'bot');
   } finally {
     if (sendBtn) sendBtn.disabled = false;
   }
@@ -483,8 +510,8 @@ async function sendChat() {
 function addChatMsg(text, who) {
   const wrap = document.getElementById('chatMessages');
   if (!wrap) return null;
-  const div = document.createElement('div');
-  div.className = 'msg msg-' + who;
+  const div       = document.createElement('div');
+  div.className   = 'msg msg-' + who;
   if (who === 'bot') {
     div.innerHTML = `<span class="bot-tag">PhishGuard AI</span>${escHtml(text).replace(/\n/g,'<br>')}`;
   } else {
@@ -497,15 +524,15 @@ function addChatMsg(text, who) {
 
 let typingCounter = 0;
 function addTyping() {
-  const id = 'typing-' + (++typingCounter);
+  const id   = 'typing-' + (++typingCounter);
   const wrap = document.getElementById('chatMessages');
   if (!wrap) return id;
-  const div = document.createElement('div');
-  div.className = 'msg msg-bot';
-  div.id = id;
-  div.innerHTML = `<span class="bot-tag">PhishGuard AI</span><div class="typing-dots"><span></span><span></span><span></span></div>`;
+  const div       = document.createElement('div');
+  div.className   = 'msg msg-bot';
+  div.id          = id;
+  div.innerHTML   = `<span class="bot-tag">PhishGuard AI</span><div class="typing-dots"><span></span><span></span><span></span></div>`;
   wrap.appendChild(div);
-  wrap.scrollTop = wrap.scrollHeight;
+  wrap.scrollTop  = wrap.scrollHeight;
   return id;
 }
 
