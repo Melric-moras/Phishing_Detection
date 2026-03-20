@@ -56,9 +56,9 @@ function analyzeURL(url) {
   const domain = extractDomain(url);
   const urlLower = url.toLowerCase();
 
- const isTrusted = TRUSTED_DOMAINS.some(d =>
-  domain === d || domain.endsWith('.' + d)
-) && !domain.includes(d + '.');
+  const isTrusted = TRUSTED_DOMAINS.some(d =>
+    domain === d || domain.endsWith('.' + d)
+  ) && !domain.includes(d + '.');
   if (isTrusted) {
     return { status: 'SAFE', score: 0, reasons: ['This is a known trusted website.'] };
   }
@@ -108,10 +108,6 @@ function analyzeURL(url) {
 
   return { status, score, reasons };
 }
-
-// ─────────────────────────────────────────────
-// SMS DETECTION
-// ─────────────────────────────────────────────
 
 function analyzeSMS(text) {
   let score = 0;

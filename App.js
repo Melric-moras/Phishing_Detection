@@ -159,14 +159,19 @@ function changeLang(lang) {
 }
 
 /* ══════════════════════════════════════
-   VOICE
+   VOICE — now removes emojis for natural speech
 ══════════════════════════════════════ */
 function speak(text) {
   const voiceToggle = document.getElementById('voiceToggle');
   if (!voiceToggle.checked) return;
   if (!('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
+
+  // Remove emojis and special symbols that may cause weird pronunciation
+  let cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
+  cleanText = cleanText.replace(/[^\w\s.,!?]/g, '');
+
+  const utt = new SpeechSynthesisUtterance(cleanText);
   utt.lang = { en:'en-US', hi:'hi-IN', ta:'ta-IN', es:'es-ES', fr:'fr-FR', ar:'ar-SA' }[currentLang] || 'en-US';
   utt.rate = 0.92;
   window.speechSynthesis.speak(utt);
@@ -175,8 +180,6 @@ function speak(text) {
 /* ══════════════════════════════════════
    BACKEND API CALLS
 ══════════════════════════════════════ */
-
-// Map language dropdown value to backend lang key
 function getLangKey() {
   const map = { en:'en', hi:'hi', ta:'ta', es:'en', fr:'en', ar:'ar' };
   return map[currentLang] || 'en';
@@ -189,13 +192,8 @@ async function callBackend(endpoint, body) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    
-    if (!res.ok) {
-      throw new Error(`Server error: ${res.status}`);
-    }
-    
-    const data = await res.json();
-    return data;
+    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+    return await res.json();
   } catch (error) {
     console.error('Backend call failed:', error);
     throw error;
@@ -204,8 +202,6 @@ async function callBackend(endpoint, body) {
 
 /* ══════════════════════════════════════
    CONVERT BACKEND RESULT → DISPLAY FORMAT
-   Backend returns: { status, score, reasons, message }
-   Display needs:   { risk, emoji, title, explanation, tips, voice_alert }
 ══════════════════════════════════════ */
 function backendToDisplay(result) {
   const riskMap = { SAFE: 'SAFE', SUSPICIOUS: 'SUSPICIOUS', DANGEROUS: 'DANGEROUS' };
@@ -215,15 +211,12 @@ function backendToDisplay(result) {
     SUSPICIOUS: 'Looks Suspicious',
     DANGEROUS: 'Danger — Likely Phishing'
   };
-
   return {
     risk: riskMap[result.status] || 'SUSPICIOUS',
     emoji: emojiMap[result.status] || '⚠️',
     title: titleMap[result.status] || result.status,
     explanation: result.message || 'Analysis complete.',
-    tips: result.reasons && result.reasons.length > 0
-      ? result.reasons.slice(0, 3)
-      : ['Always double-check links before clicking.', 'Never share your OTP or PIN.', 'When in doubt, contact your bank directly.'],
+    tips: result.reasons?.length ? result.reasons.slice(0, 3) : ['Always double-check links before clicking.', 'Never share your OTP or PIN.', 'When in doubt, contact your bank directly.'],
     voice_alert: result.message || ''
   };
 }
@@ -258,7 +251,7 @@ function showResult(data, inputPreview, type) {
 }
 
 /* ══════════════════════════════════════
-   ANALYZE FUNCTIONS — now call backend
+   ANALYZE FUNCTIONS
 ══════════════════════════════════════ */
 async function runAnalysis(endpoint, body, inputPreview, type) {
   showSpinner(true);
@@ -269,7 +262,6 @@ async function runAnalysis(endpoint, body, inputPreview, type) {
     showResult(display, inputPreview, type);
   } catch (e) {
     console.error('Analysis error:', e);
-    // Show a more specific error message based on the error type
     let errorMsg = 'Analysis failed. ';
     if (e.message === 'Failed to fetch') {
       errorMsg += 'Cannot connect to server. Make sure the server is running on http://localhost:3000\n\nRun: node server.js';
@@ -300,7 +292,6 @@ function analyzeSMS() {
 function analyzeDomain() {
   const v = document.getElementById('domainInput').value.trim();
   if (!v) return alert('Please enter a domain to check.');
-  // Domain check reuses the link endpoint — prepend https:// if missing
   const url = v.startsWith('http') ? v : 'https://' + v;
   runAnalysis('/api/check-link', { url, lang: getLangKey() }, v, 'Domain');
 }
@@ -361,7 +352,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Voice toggle label
   const voiceToggle = document.getElementById('voiceToggle');
   if (voiceToggle) {
     voiceToggle.addEventListener('change', () => {
@@ -452,7 +442,7 @@ function clearHistory() {
 }
 
 /* ══════════════════════════════════════
-   CHATBOT — calls backend /api/chatbot
+   CHATBOT
 ══════════════════════════════════════ */
 async function sendChat() {
   const input = document.getElementById('chatInput');
