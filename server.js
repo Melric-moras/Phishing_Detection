@@ -31,8 +31,8 @@ const TRUSTED_DOMAINS = [
 
 const PHISHING_PATTERNS = [
   /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/,
-  /[a-z0-9]{20,}/,
-  /@/,
+  /[a-z0-9]{30,}/,
+  /@.*http/,
   /bit\.ly|tinyurl|t\.co|shorturl/i,
   /free.*money|money.*free/i,
   /your.*account.*suspend/i,
@@ -56,7 +56,9 @@ function analyzeURL(url) {
   const domain = extractDomain(url);
   const urlLower = url.toLowerCase();
 
-  const isTrusted = TRUSTED_DOMAINS.some(d => domain === d || domain.endsWith('.' + d));
+ const isTrusted = TRUSTED_DOMAINS.some(d =>
+  domain === d || domain.endsWith('.' + d)
+) && !domain.includes(d + '.');
   if (isTrusted) {
     return { status: 'SAFE', score: 0, reasons: ['This is a known trusted website.'] };
   }
