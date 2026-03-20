@@ -183,13 +183,23 @@ function getLangKey() {
 }
 
 async function callBackend(endpoint, body) {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(`Server error: ${res.status}`);
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    
+    if (!res.ok) {
+      throw new Error(`Server error: ${res.status}`);
+    }
+    
+    const data = await res.json();
+    return data;
+  } catch (error) {
+    console.error('Backend call failed:', error);
+    throw error;
+  }
 }
 
 /* ══════════════════════════════════════
@@ -258,8 +268,17 @@ async function runAnalysis(endpoint, body, inputPreview, type) {
     const display = backendToDisplay(result);
     showResult(display, inputPreview, type);
   } catch (e) {
-    console.error(e);
-    alert('Analysis failed. Make sure the server is running on http://localhost:3000\n\nRun: node server.js');
+    console.error('Analysis error:', e);
+    // Show a more specific error message based on the error type
+    let errorMsg = 'Analysis failed. ';
+    if (e.message === 'Failed to fetch') {
+      errorMsg += 'Cannot connect to server. Make sure the server is running on http://localhost:3000\n\nRun: node server.js';
+    } else if (e.message.includes('Server error')) {
+      errorMsg += `Server returned error: ${e.message}`;
+    } else {
+      errorMsg += 'Please check if the backend server is running properly.';
+    }
+    alert(errorMsg);
   } finally {
     showSpinner(false);
     disableButtons(false);
@@ -332,19 +351,23 @@ function handleQR(event) {
 // Drag & drop
 document.addEventListener('DOMContentLoaded', () => {
   const qrDrop = document.getElementById('qrDrop');
-  qrDrop.addEventListener('dragover', e => { e.preventDefault(); qrDrop.classList.add('drag-over'); });
-  qrDrop.addEventListener('dragleave', () => qrDrop.classList.remove('drag-over'));
-  qrDrop.addEventListener('drop', e => {
-    e.preventDefault(); qrDrop.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file) handleQR({ target: { files: [file] } });
-  });
+  if (qrDrop) {
+    qrDrop.addEventListener('dragover', e => { e.preventDefault(); qrDrop.classList.add('drag-over'); });
+    qrDrop.addEventListener('dragleave', () => qrDrop.classList.remove('drag-over'));
+    qrDrop.addEventListener('drop', e => {
+      e.preventDefault(); qrDrop.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) handleQR({ target: { files: [file] } });
+    });
+  }
 
   // Voice toggle label
   const voiceToggle = document.getElementById('voiceToggle');
-  voiceToggle.addEventListener('change', () => {
-    document.getElementById('voiceLabel').textContent = voiceToggle.checked ? t('voiceOn') : t('voiceOff');
-  });
+  if (voiceToggle) {
+    voiceToggle.addEventListener('change', () => {
+      document.getElementById('voiceLabel').textContent = voiceToggle.checked ? t('voiceOn') : t('voiceOff');
+    });
+  }
 
   applyLang();
   renderHistory();
@@ -354,7 +377,8 @@ document.addEventListener('DOMContentLoaded', () => {
    UTILITIES
 ══════════════════════════════════════ */
 function showSpinner(show) {
-  document.getElementById('spinnerWrap').classList.toggle('show', show);
+  const spinner = document.getElementById('spinnerWrap');
+  if (spinner) spinner.classList.toggle('show', show);
 }
 
 function disableButtons(d) {
@@ -366,11 +390,17 @@ function disableButtons(d) {
 
 function setExample(field, val) {
   if (field === 'link') {
-    document.getElementById('linkInput').value = val;
-    document.getElementById('linkInput').focus();
+    const linkInput = document.getElementById('linkInput');
+    if (linkInput) {
+      linkInput.value = val;
+      linkInput.focus();
+    }
   } else if (field === 'sms') {
-    document.getElementById('smsInput').value = val;
-    document.getElementById('smsInput').focus();
+    const smsInput = document.getElementById('smsInput');
+    if (smsInput) {
+      smsInput.value = val;
+      smsInput.focus();
+    }
   }
 }
 
@@ -390,29 +420,35 @@ function renderHistory() {
   const list = document.getElementById('historyList');
   const noEl = document.getElementById('noHistory');
   if (scanHistory.length === 0) {
-    noEl.style.display = 'block';
-    list.innerHTML = '';
-    list.appendChild(noEl);
+    if (noEl) noEl.style.display = 'block';
+    if (list) {
+      list.innerHTML = '';
+      if (noEl) list.appendChild(noEl);
+    }
     return;
   }
-  noEl.style.display = 'none';
-  list.innerHTML = scanHistory.slice(0, 10).map(item => `
-    <div class="history-item">
-      <div class="history-dot dot-${item.state}"></div>
-      <div class="history-text">
-        <div class="history-url">${escHtml(item.text)}</div>
-        <div class="history-meta">${item.type} · ${item.time}</div>
+  if (noEl) noEl.style.display = 'none';
+  if (list) {
+    list.innerHTML = scanHistory.slice(0, 10).map(item => `
+      <div class="history-item">
+        <div class="history-dot dot-${item.state}"></div>
+        <div class="history-text">
+          <div class="history-url">${escHtml(item.text)}</div>
+          <div class="history-meta">${item.type} · ${item.time}</div>
+        </div>
+        <div class="history-badge badge-${item.state}">${item.risk}</div>
       </div>
-      <div class="history-badge badge-${item.state}">${item.risk}</div>
-    </div>
-  `).join('');
+    `).join('');
+  }
 }
 
 function clearHistory() {
   scanHistory = [];
   renderHistory();
-  document.getElementById('resultPanel').classList.remove('show');
-  document.getElementById('mainGrid').className = 'main';
+  const resultPanel = document.getElementById('resultPanel');
+  if (resultPanel) resultPanel.classList.remove('show');
+  const mainGrid = document.getElementById('mainGrid');
+  if (mainGrid) mainGrid.className = 'main';
 }
 
 /* ══════════════════════════════════════
@@ -425,7 +461,8 @@ async function sendChat() {
   input.value = '';
   addChatMsg(msg, 'user');
   const typingId = addTyping();
-  document.getElementById('chatSend').disabled = true;
+  const sendBtn = document.getElementById('chatSend');
+  if (sendBtn) sendBtn.disabled = true;
 
   try {
     const data = await callBackend('/api/chatbot', { message: msg });
@@ -433,17 +470,25 @@ async function sendChat() {
     removeTyping(typingId);
     addChatMsg(reply, 'bot');
     const voiceToggle = document.getElementById('voiceToggle');
-    if (voiceToggle.checked && reply.length < 200) speak(reply);
-  } catch {
+    if (voiceToggle && voiceToggle.checked && reply.length < 200) speak(reply);
+  } catch (error) {
+    console.error('Chat error:', error);
     removeTyping(typingId);
-    addChatMsg('Sorry, I could not connect to the server. Make sure it is running.', 'bot');
+    let errorMsg = 'Sorry, I could not connect to the server. ';
+    if (error.message === 'Failed to fetch') {
+      errorMsg += 'Make sure the server is running on http://localhost:3000';
+    } else {
+      errorMsg += 'Please check if the backend server is running properly.';
+    }
+    addChatMsg(errorMsg, 'bot');
   } finally {
-    document.getElementById('chatSend').disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
   }
 }
 
 function addChatMsg(text, who) {
   const wrap = document.getElementById('chatMessages');
+  if (!wrap) return null;
   const div = document.createElement('div');
   div.className = 'msg msg-' + who;
   if (who === 'bot') {
@@ -460,6 +505,7 @@ let typingCounter = 0;
 function addTyping() {
   const id = 'typing-' + (++typingCounter);
   const wrap = document.getElementById('chatMessages');
+  if (!wrap) return id;
   const div = document.createElement('div');
   div.className = 'msg msg-bot';
   div.id = id;
@@ -475,6 +521,7 @@ function removeTyping(id) {
 }
 
 function askChip(question) {
-  document.getElementById('chatInput').value = question;
+  const chatInput = document.getElementById('chatInput');
+  if (chatInput) chatInput.value = question;
   sendChat();
 }
