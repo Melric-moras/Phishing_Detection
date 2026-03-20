@@ -6,7 +6,21 @@ app.get("/", (req, res) => {
 });
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname)); // serves index.html, style.css, app.js
+app.use(express.json());
+
+app.post("/check", (req, res) => {
+  const { url } = req.body;
+
+  if (!url) {
+    return res.json({ status: "error", message: "No URL provided" });
+  }
+
+  if (url.includes("https")) {
+    res.json({ status: "safe" });
+  } else {
+    res.json({ status: "phishing" });
+  }
+});// serves index.html, style.css, app.js
 
 // ─────────────────────────────────────────────
 // PHISHING DETECTION
