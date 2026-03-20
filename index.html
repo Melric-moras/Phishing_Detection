@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhishGuard – Smart Phishing Protection</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ════════════════ HEADER ════════════════ -->
+<header>
+  <div class="brand">
+    <div class="shield-icon">🛡️</div>
+    <div class="brand-text">
+      <h1>PhishGuard</h1>
+      <p id="headerSub">AI-Powered Phishing Protection</p>
+    </div>
+  </div>
+
+  <div class="header-controls">
+    <select id="langSelect" onchange="changeLang(this.value)">
+      <option value="en">🇬🇧 English</option>
+      <option value="hi">🇮🇳 हिंदी</option>
+      <option value="ta">🇮🇳 தமிழ்</option>
+      <option value="es">🇪🇸 Español</option>
+      <option value="fr">🇫🇷 Français</option>
+      <option value="ar">🇸🇦 العربية</option>
+    </select>
+
+    <label class="voice-toggle">
+      <input type="checkbox" id="voiceToggle" checked>
+      <span class="voice-dot"></span>
+      🔊 <span id="voiceLabel">Voice ON</span>
+    </label>
+  </div>
+</header>
+
+<!-- ════════════════ MAIN GRID ════════════════ -->
+<div class="main" id="mainGrid">
+
+  <!-- Info bar -->
+  <div class="info-bar">
+    <span>ℹ️</span>
+    <span id="infoBarText">Paste any link, SMS message, or scan a QR code. Our AI will instantly tell you if it's safe — in simple, clear language.</span>
+  </div>
+
+  <!-- ── Card 1: Link Checker ── -->
+  <div class="card">
+    <div class="card-title">
+      <div class="icon">🔗</div>
+      <div>
+        <div id="linkCardTitle">Link Checker</div>
+        <div style="font-size:.8rem;font-weight:400;color:var(--muted)" id="linkCardSub">Paste any website link below</div>
+      </div>
+    </div>
+    <input type="text" id="linkInput" placeholder="https://example.com/login?ref=bank" />
+    <button class="btn btn-primary" onclick="analyzeLink()" id="linkBtn">
+      🔍 <span id="linkBtnText">Check This Link</span>
+    </button>
+  </div>
+
+  <!-- ── Card 2: SMS Checker ── -->
+  <div class="card">
+    <div class="card-title">
+      <div class="icon">💬</div>
+      <div>
+        <div id="smsCardTitle">SMS / Message Checker</div>
+        <div style="font-size:.8rem;font-weight:400;color:var(--muted)" id="smsCardSub">Copy & paste a suspicious message</div>
+      </div>
+    </div>
+    <textarea id="smsInput" placeholder="e.g. URGENT: Your bank account has been suspended. Click here immediately: http://bit.ly/3xYz..."></textarea>
+    <button class="btn btn-primary" onclick="analyzeSMS()" id="smsBtn">
+      🔍 <span id="smsBtnText">Check This Message</span>
+    </button>
+  </div>
+
+  <!-- ── Card 3: QR Scanner ── -->
+  <div class="card">
+    <div class="card-title">
+      <div class="icon">📷</div>
+      <div>
+        <div id="qrCardTitle">QR Code Scanner</div>
+        <div style="font-size:.8rem;font-weight:400;color:var(--muted)" id="qrCardSub">Upload a QR code image to scan</div>
+      </div>
+    </div>
+    <div class="qr-drop" id="qrDrop" onclick="document.getElementById('qrFileInput').click()">
+      <div class="big-icon">📸</div>
+      <p id="qrDropText">Tap to upload a QR code photo</p>
+      <p style="font-size:.78rem;margin-top:4px;color:#555">Supports PNG, JPG</p>
+    </div>
+    <input type="file" id="qrFileInput" accept="image/*" onchange="handleQR(event)">
+    <img id="qrPreview" alt="QR preview">
+    <input type="text" id="qrDecoded" placeholder="QR content will appear here" style="margin-top:12px;display:none">
+    <button class="btn btn-primary" onclick="analyzeQR()" id="qrBtn" style="display:none">
+      🔍 <span id="qrBtnText">Analyze QR Content</span>
+    </button>
+  </div>
+
+  <!-- ── Card 4: Domain Checker ── -->
+  <div class="card">
+    <div class="card-title">
+      <div class="icon">🌐</div>
+      <div>
+        <div id="domainCardTitle">Domain Reputation Check</div>
+        <div style="font-size:.8rem;font-weight:400;color:var(--muted)" id="domainCardSub">Enter just a domain name</div>
+      </div>
+    </div>
+    <input type="text" id="domainInput" placeholder="e.g. paypa1-secure.com" />
+    <button class="btn btn-primary" onclick="analyzeDomain()" id="domainBtn">
+      🔍 <span id="domainBtnText">Check Domain</span>
+    </button>
+    <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:6px">
+      <span style="font-size:.78rem;color:var(--muted);width:100%;margin-bottom:2px" id="tryExamplesLabel">Try examples:</span>
+      <button class="chip" onclick="setExample('link','https://paypal-secure-login.phishsite.com/verify?id=928374')">Fake PayPal</button>
+      <button class="chip" onclick="setExample('link','https://google.com')">Google</button>
+      <button class="chip" onclick="setExample('sms','URGENT! Your SBI account is blocked. Verify now: http://sbi-verify.ml/login?token=abc123')">Fake SBI SMS</button>
+    </div>
+  </div>
+
+  <!-- ── Spinner ── -->
+  <div class="spinner-wrap" id="spinnerWrap" style="grid-column:1/-1">
+    <div class="spinner"></div>
+    <span id="spinnerText">Analyzing… please wait</span>
+  </div>
+
+  <!-- ── Result Panel ── -->
+  <div class="result-panel" id="resultPanel">
+    <div class="result-header">
+      <div class="result-badge" id="resultBadge">✅</div>
+      <div>
+        <div class="result-label" id="resultLabel">SAFE</div>
+        <div class="result-sublabel" id="resultSub">No threats detected</div>
+      </div>
+    </div>
+    <div class="result-body">
+      <p id="resultExplain">This link appears to be safe.</p>
+      <div class="result-tips" id="resultTips"></div>
+    </div>
+  </div>
+
+  <!-- ── AI Chatbot ── -->
+  <div class="chat-wrap">
+    <div class="chat-title">
+      🤖 <span id="chatTitle">PhishGuard AI Assistant</span>
+      <span style="margin-left:auto;font-size:.78rem;font-weight:400;color:var(--muted)" id="chatSubTitle">Ask me anything about online safety</span>
+    </div>
+
+    <div class="quick-asks" id="quickAsks">
+      <button class="chip" onclick="askChip('What is phishing?')">What is phishing?</button>
+      <button class="chip" onclick="askChip('How do I spot a fake link?')">Spot fake links</button>
+      <button class="chip" onclick="askChip('Is my OTP safe to share?')">OTP safety</button>
+      <button class="chip" onclick="askChip('How do scammers use QR codes?')">QR scams</button>
+      <button class="chip" onclick="askChip('What should I do if I clicked a bad link?')">Clicked bad link?</button>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">
+      <div class="msg msg-bot">
+        <span class="bot-tag">PhishGuard AI</span>
+        👋 Hello! I'm your personal online safety assistant. Ask me anything about suspicious messages, links, or scams!
+      </div>
+    </div>
+
+    <div class="chat-input-row">
+      <input type="text" id="chatInput" placeholder="Ask about online safety…" onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="chat-send" id="chatSend" onclick="sendChat()">➤</button>
+    </div>
+  </div>
+
+  <!-- ── History ── -->
+  <div class="history-wrap">
+    <div class="history-header">
+      <h3 id="historyTitle">📋 Recent Checks</h3>
+      <button class="clear-btn" onclick="clearHistory()">Clear All</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div class="no-history" id="noHistory">No checks yet. Start by analyzing a link or message.</div>
+    </div>
+  </div>
+
+</div><!-- end .main -->
+
+<!-- jsQR for QR decoding (client-side) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
