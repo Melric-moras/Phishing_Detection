@@ -264,8 +264,8 @@ app.get('/api/health', (req, res) => {
 // START
 // ─────────────────────────────────────────────
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
-  console.log(`✅ PhishGuard running at http://localhost:${PORT}`);
-  console.log(`   Open http://localhost:${PORT} in your browser`);
+  console.log(`Server running on port ${PORT}`);
 });
