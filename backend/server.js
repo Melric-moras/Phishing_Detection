@@ -1,30 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 const app = express();
-app.get("/", (req, res) => {
-  res.send("Phishing Detection API is running 🚀");
-});
+
 app.use(cors());
 app.use(express.json());
-<<<<<<< HEAD:backend/server.js
-app.use(express.json());
-
-app.post("/check", (req, res) => {
-  const { url } = req.body;
-
-  if (!url) {
-    return res.json({ status: "error", message: "No URL provided" });
-  }
-
-  if (url.includes("https")) {
-    res.json({ status: "safe" });
-  } else {
-    res.json({ status: "phishing" });
-  }
-});// serves index.html, style.css, app.js
-=======
 app.use(express.static(__dirname));
->>>>>>> 9e8f6e8 (Updated 10.31pm):server.js
 
 // ─────────────────────────────────────────────
 // DETECTION DATA
