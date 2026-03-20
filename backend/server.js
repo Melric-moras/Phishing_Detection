@@ -303,37 +303,49 @@ function getMessage(status, lang = 'en') {
 // ─────────────────────────────────────────────
 //
 // HOW TO ENABLE:
-//   Set your API key as an environment variable before starting:
-//     export ANTHROPIC_API_KEY="sk-ant-..."
-//   or add it to a .env file (install dotenv and require it at the top).
+//   export ANTHROPIC_API_KEY="sk-ant-..."
+//   node server.js
 //
-// Without the key the chatbot falls back to a keyword-based FAQ.
+// Without the key the chatbot uses a smart topic-aware fallback
+// that handles open-ended natural language questions.
 // ─────────────────────────────────────────────
 
-const CHATBOT_SYSTEM_PROMPT = `You are PhishGuard AI, a friendly cybersecurity assistant that specialises EXCLUSIVELY in phishing and online scam awareness.
+const CHATBOT_SYSTEM_PROMPT = `You are PhishGuard AI, a friendly cybersecurity assistant focused on phishing awareness and online safety.
 
-SCOPE:
-- Answer ONLY questions about: phishing, smishing (SMS scams), vishing (voice scams), fake links, suspicious emails, QR code scams, UPI/payment fraud, OTP fraud, KYC scams, and general online safety best practices.
-- If the user asks ANYTHING unrelated to phishing or online safety, respond with exactly this sentence (translated into their language if needed): "I can only help with phishing and online safety questions. Try asking: What is phishing? How do I spot a fake link? What should I do if I clicked a bad link?"
-- Do NOT make any exceptions to the scope restriction.
+YOUR PURPOSE:
+Help users understand phishing, online scams, and how to stay safe. Be generous about what counts as in-scope — if a question is even loosely related to online fraud, scams, cybersecurity, or digital safety, answer it helpfully.
+
+IN-SCOPE TOPICS (answer all of these freely):
+- What phishing is, how it works, why scammers do it, how they benefit
+- How to spot fake links, fake websites, phishing emails, fake SMS
+- OTP safety — what it is, why never share it, how OTP scams work
+- UPI and mobile payment scams
+- QR code scams
+- KYC fraud
+- Social engineering and psychological manipulation by scammers
+- What to do after clicking a bad link or sharing details by mistake
+- How to report scams in India
+- General online safety and password hygiene
+- Any variation, follow-up, or creative phrasing of the above
 
 STYLE:
-- Keep every answer to 2 to 4 short sentences maximum.
-- Use plain conversational language — no jargon, no markdown, no bullet points, no asterisks, no special characters.
-- Do NOT include emojis. The reply will be read aloud by text-to-speech.
-- Sound reassuring and helpful, not alarming.
+- Give real, complete, helpful answers
+- 2 to 5 sentences, plain conversational language
+- No markdown, no bullet points, no asterisks, no emojis (replies are read aloud)
+- Sound calm, reassuring and knowledgeable
 
-LANGUAGE:
-- Always reply in the same language the user writes in.
-- If they write in Hindi, respond in Hindi. If Tamil, respond in Tamil. Match their language exactly.`;
+OUT OF SCOPE:
+- If someone asks something genuinely unrelated to online safety, scams, or cybersecurity (like recipes, sports, entertainment), respond with: "I am only able to help with phishing and online safety topics. Feel free to ask me anything about scams, fake links, OTP safety, or how to protect yourself online."
+
+LANGUAGE RULE:
+Reply in the SAME language the user writes in. Hindi gets Hindi. Tamil gets Tamil.`;
 
 async function getAIChatbotReply(message) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-
   if (!apiKey) {
-    return getFallbackReply(message);
+    console.log('  [chatbot] No ANTHROPIC_API_KEY — using smart fallback');
+    return getSmartFallbackReply(message);
   }
-
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method:  'POST',
@@ -344,57 +356,187 @@ async function getAIChatbotReply(message) {
       },
       body: JSON.stringify({
         model:      'claude-haiku-4-5-20251001',
-        max_tokens: 300,
+        max_tokens: 400,
         system:     CHATBOT_SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: message }],
       }),
     });
-
     if (!response.ok) {
       const errText = await response.text();
       console.error('Anthropic API error:', response.status, errText);
-      return getFallbackReply(message);
+      return getSmartFallbackReply(message);
     }
-
     const data  = await response.json();
     const reply = data.content?.[0]?.text?.trim();
-    return reply || getFallbackReply(message);
-
+    return reply || getSmartFallbackReply(message);
   } catch (err) {
     console.error('Chatbot fetch failed:', err.message);
-    return getFallbackReply(message);
+    return getSmartFallbackReply(message);
   }
 }
 
-// Keyword fallback used when API key is absent or API call fails
-const FALLBACK_REPLIES = {
-  'what is phishing':
-    'Phishing is when scammers trick you into revealing passwords, OTPs, or bank details using fake links or messages. They often impersonate banks, government agencies, or popular apps.',
-  'how to stay safe':
-    'Never share your OTP or PIN with anyone, not even bank employees. Always verify the link before clicking. When in doubt, call your bank on the official number.',
-  'what is otp':
-    'OTP or One Time Password is a secret code sent to your phone for verification. Never share it with anyone. Real banks never ask for your OTP.',
-  'spot fake link':
-    'Check for misspellings like paypa1.com, suspicious endings like .xyz or .ml, very long URLs, and anything that is not HTTPS. When unsure, paste it in the Link Checker above.',
-  'qr':
-    'Scammers place fake QR codes on posters and emails. Always scan with PhishGuard before visiting any link inside it. Receiving money never requires scanning a QR code.',
-  'clicked a bad link':
-    'Stay calm. Immediately close the tab, do not enter any information, change your passwords, and contact your bank if you shared any details.',
-  'what is upi':
-    'UPI is a digital payment system. Your UPI PIN is only for sending money. Entering a PIN is never required to receive money. Anyone asking for your UPI PIN is a scammer.',
-  'kyc':
-    'KYC is a legitimate bank process done in-person or through the official app or website. Banks never ask for KYC through SMS links or phone calls.',
-  'help':
-    'I can help with phishing awareness, link safety, OTP safety, QR code scams, UPI scams, and more. Just ask me anything about online safety.',
-};
+// ─────────────────────────────────────────────
+// SMART FALLBACK — topic-aware natural language matcher
+// ─────────────────────────────────────────────
 
-function getFallbackReply(message) {
+const TOPICS = [
+  {
+    id: 'what_is_phishing',
+    triggers: [
+      'what is phishing', 'what phishing', 'define phishing', 'phishing mean',
+      'how does phishing work', 'phishing work', 'explain phishing', 'how phishing',
+      'phishing attacks', 'types of phishing', 'why phishing', 'benefit scammer',
+      'benefit from phishing', 'scammer benefit', 'gain from phishing',
+      'why do scammer', 'how scammer make money', 'how do scammer',
+      'profit from phishing', 'how does scammer', 'scammer earn',
+      'why do people phish',
+    ],
+    reply: 'Phishing is when scammers send fake messages or create fake websites to trick you into giving up your passwords, OTP, or bank details. Scammers benefit by stealing money directly from your account, selling your personal data to other criminals, or using your identity to commit further fraud. They disguise themselves as trusted organisations like banks, government agencies, or popular apps to make the message seem legitimate. The goal is always to make you act quickly without thinking.',
+  },
+  {
+    id: 'spot_fake_link',
+    triggers: [
+      'spot fake', 'fake link', 'identify fake', 'tell if link', 'check link',
+      'how to check link', 'is this link safe', 'link safe', 'unsafe link',
+      'how do i spot', 'recognise phishing', 'detect phishing', 'fake website',
+      'tell fake', 'suspicious link', 'look fake', 'how to identify',
+      'verify link', 'check url', 'url safe', 'link real', 'real website',
+      'fake domain', 'spoof website', 'phishing website',
+    ],
+    reply: 'To spot a fake link, look carefully at the domain name — scammers use misspellings like paypa1.com or g00gle.com. Be suspicious of unusual endings like .xyz, .ml, or .tk, which are free domains commonly used in scams. Real banks and companies always use HTTPS and their official domain. If the URL is unusually long, has random characters, or was sent to you unexpectedly, do not click it. Paste it into the Link Checker above for an instant analysis.',
+  },
+  {
+    id: 'otp_safety',
+    triggers: [
+      'otp', 'one time password', 'otp safe', 'share otp', 'give otp',
+      'safe to share', 'should i share', 'share my otp', 'otp danger',
+      'otp scam', 'otp fraud', 'otp asked', 'bank ask otp',
+      'is otp', 'why not share otp', 'otp meaning', 'what is otp',
+      'otp someone asking', 'asked for otp', 'caller asked otp',
+    ],
+    reply: 'Your OTP (One Time Password) should never be shared with anyone — not with someone calling from a bank, not with a company representative, not with anyone at all. No legitimate bank, company, or government office will ever call or message you asking for your OTP. The moment you share your OTP, a scammer can instantly access your account and transfer money. If someone asks for your OTP, end the call immediately and contact your bank on their official number.',
+  },
+  {
+    id: 'upi_safety',
+    triggers: [
+      'upi', 'upi pin', 'upi scam', 'upi fraud', 'payment scam',
+      'gpay', 'phonepe', 'paytm', 'receive money pin', 'scan to receive',
+      'money transfer scam', 'digital payment', 'online payment safe',
+      'upi safe', 'how upi scam', 'mobile payment', 'send money scam',
+    ],
+    reply: 'Your UPI PIN is only required when sending money — you never need to enter any PIN to receive money. Scammers often trick victims by saying they are sending a refund or prize and ask you to enter your PIN or scan a QR code to accept it. This is always a scam. Only use payment apps downloaded from official app stores, and never share your UPI PIN with anyone over call, SMS, or chat.',
+  },
+  {
+    id: 'qr_scam',
+    triggers: [
+      'qr code', 'qr scam', 'scan qr', 'qr fraud', 'qr phishing',
+      'fake qr', 'malicious qr', 'qr link', 'unsafe qr', 'qr code safe',
+      'how qr scam', 'qr code scammer', 'qr on poster',
+    ],
+    reply: 'Scammers place fake QR codes over real ones on posters, menus, and parking machines. Scanning a malicious QR code can take you to a phishing website designed to steal your login details, or it can trigger an automatic payment from your phone. Always verify where a QR code leads before entering any information. Remember — receiving money never requires you to scan a QR code.',
+  },
+  {
+    id: 'kyc_scam',
+    triggers: [
+      'kyc', 'know your customer', 'kyc update', 'kyc verification',
+      'kyc expired', 'kyc link', 'kyc sms', 'kyc call', 'kyc scam',
+      'complete kyc', 'kyc blocked', 'account blocked kyc',
+    ],
+    reply: 'KYC or Know Your Customer is a real verification process that banks use. However, banks always do it in-person at a branch, through their official app, or on their official website — never through an SMS link or a phone call from an unknown number. Any message saying your account will be blocked unless you update KYC by clicking a link is a phishing scam.',
+  },
+  {
+    id: 'clicked_bad_link',
+    triggers: [
+      'clicked', 'already clicked', 'i clicked', 'opened link', 'visited link',
+      'entered details', 'gave my details', 'what do i do', 'what should i do',
+      'i shared', 'i gave', 'accidentally', 'by mistake', 'already shared',
+      'shared my otp', 'gave otp', 'entered my password', 'filled form',
+    ],
+    reply: 'Stay calm and act immediately. Close the suspicious tab or app right away and change your passwords for your bank account, email, and any other important accounts as fast as possible. If you entered any banking details, OTP, or PIN, call your bank immediately on their official customer care number to freeze or block your account. Report the incident to the national cybercrime helpline at 1930 or cybercrime.gov.in.',
+  },
+  {
+    id: 'email_phishing',
+    triggers: [
+      'phishing email', 'fake email', 'suspicious email', 'scam email',
+      'email scam', 'email fraud', 'fake mail', 'malicious email',
+      'spam email', 'email attachment', 'email link', 'spoofed email',
+    ],
+    reply: 'Phishing emails look like they come from trusted sources like your bank, a courier company, or a government office. Always check the sender email address carefully — it often contains random characters or a slightly wrong domain. Never click links or download attachments from unexpected emails. If you are unsure, go directly to the official website by typing the address yourself in the browser.',
+  },
+  {
+    id: 'voice_vishing',
+    triggers: [
+      'phone call scam', 'vishing', 'fake call', 'scam call', 'call from bank',
+      'unknown caller', 'caller asking', 'phone fraud', 'call fraud',
+      'voice scam', 'someone called', 'got a call', 'call saying',
+    ],
+    reply: 'Voice phishing or vishing is when scammers call you pretending to be from your bank, government, or a tech company. Real banks never call asking for your OTP, PIN, or full card number over the phone. If you receive such a call, hang up immediately and call your bank back using the number printed on the back of your card or on their official website.',
+  },
+  {
+    id: 'social_engineering',
+    triggers: [
+      'social engineering', 'manipulation', 'psychological trick', 'trick people',
+      'how scammer trick', 'why people fall', 'people get scammed',
+      'impersonation', 'pretend to be', 'fake identity', 'urgency tactic',
+      'pressure tactic', 'fear tactic', 'how scammer convince',
+    ],
+    reply: 'Social engineering is the art of manipulating people psychologically rather than hacking computers. Scammers exploit emotions like fear, urgency, greed, and trust to make you act without thinking. A message saying your account will be blocked in one hour is designed to cause panic so you click without checking. Recognising this pressure tactic is your best defence — always pause, take a breath, and verify through official channels before doing anything.',
+  },
+  {
+    id: 'report_scam',
+    triggers: [
+      'report scam', 'report fraud', 'how to report', 'where to report',
+      'complain about scam', 'file complaint', 'cybercrime helpline',
+      'report phishing', 'report to bank', 'lodge complaint',
+    ],
+    reply: 'In India, you can report cybercrime online at cybercrime.gov.in or call the national helpline 1930. Contact your bank immediately on their official customer care number — acting within the first 24 hours gives the best chance of recovering lost money. Also file a complaint at your nearest police station and keep screenshots of the scam as evidence.',
+  },
+  {
+    id: 'stay_safe',
+    triggers: [
+      'stay safe', 'how to be safe', 'protect myself', 'protect account',
+      'online safety', 'safety tips', 'prevent phishing', 'avoid scam',
+      'best practices', 'security tips', 'be careful online',
+      'how to avoid', 'how to prevent', 'safety measures',
+    ],
+    reply: 'The most important rules for staying safe online are: never share your OTP, PIN, or password with anyone for any reason. Always verify a link before clicking — use PhishGuard for instant checking. Be suspicious of any message that creates urgency or offers something too good to be true. Enable two-factor authentication on your bank and email accounts and use strong unique passwords.',
+  },
+  {
+    id: 'help',
+    triggers: [
+      'help', 'what can you do', 'what can i ask', 'capabilities',
+      'tell me about yourself', 'what do you know',
+    ],
+    reply: 'I am PhishGuard AI, your online safety assistant. You can ask me anything about phishing scams, how to spot fake links, OTP and UPI safety, QR code fraud, KYC scams, voice call scams, what to do after clicking a bad link, and how to report cybercrime. Ask any question in your own words and I will do my best to help.',
+  },
+];
+
+const PHISHING_SIGNAL_WORDS = [
+  'phish', 'scam', 'fraud', 'fake', 'suspicious', 'hack', 'steal',
+  'password', 'credential', 'otp', 'pin', 'upi', 'kyc', 'bank',
+  'account', 'link', 'url', 'email', 'sms', 'qr', 'virus', 'malware',
+  'safe', 'danger', 'warning', 'block', 'suspend', 'verify', 'click',
+  'scammer', 'criminal', 'cybercrime', 'identity', 'theft', 'data',
+  'trick', 'cheat', 'money', 'transfer', 'debit', 'credit',
+  'clicked', 'opened', 'shared', 'gave', 'entered', 'accident',
+  'smishing', 'vishing', 'spam', 'malware', 'ransomware', 'hacker',
+  'security', 'privacy', 'protect', 'attack', 'breach', 'leak',
+];
+
+function getSmartFallbackReply(message) {
   const lower = message.toLowerCase();
-  for (const key of Object.keys(FALLBACK_REPLIES)) {
-    if (lower.includes(key)) return FALLBACK_REPLIES[key];
+  for (const topic of TOPICS) {
+    for (const trigger of topic.triggers) {
+      if (lower.includes(trigger)) return topic.reply;
+    }
   }
-  return "I can only help with phishing and online safety questions. Try asking: What is phishing? How do I spot a fake link? What should I do if I clicked a bad link?";
+  const hasSignal = PHISHING_SIGNAL_WORDS.some(w => lower.includes(w));
+  if (hasSignal) {
+    return 'That is a great online safety question. In general, always be cautious of any message that creates urgency, asks for personal details like OTP or PIN, or contains links from unknown sources. You can paste any link or suspicious message into PhishGuard above for an instant analysis. If you have already shared sensitive details, contact your bank immediately.';
+  }
+  return 'I am only able to help with phishing and online safety topics. Feel free to ask me anything about scams, fake links, OTP safety, QR code fraud, or how to protect yourself online.';
 }
+
 
 // ─────────────────────────────────────────────
 // API ROUTES
