@@ -1,7 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const app = express();
-
+app.get("/", (req, res) => {
+  res.send("Phishing Detection API is running 🚀");
+});
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname)); // serves index.html, style.css, app.js
